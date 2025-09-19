@@ -1,0 +1,61 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: clearml-worker-local
+  namespace: clearml
+  labels:
+    app: clearml-worker-local
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: clearml-worker-local
+  template:
+    metadata:
+      labels:
+        app: clearml-worker-local
+    spec:
+      nodeSelector:
+        kubernetes.io/arch: arm64
+      containers:
+      - name: python-container
+        image: python:3.11-slim-bookworm
+        command: ["/bin/sh", "-c"]
+        args:
+          - |
+            # Create and activate virtual environment
+            python -m venv /app/venv
+            . /app/venv/bin/activate
+            
+            # Install dependencies
+            pip install --no-cache-dir -r /app/requirements.txt
+            
+            # Use venv Python as default
+            exec /app/venv/bin/clearml-agent daemon --gpus 0 --queue default
+        volumeMounts:
+        - name: python-code-volume
+          mountPath: /app
+        - name: clearml-config
+          mountPath: /root/clearml.conf
+          subPath: clearml.conf
+        env:
+        - name: PYTHONPATH
+          value: "/app/venv"
+        - name: PYTHONUNBUFFERED
+          value: "1"
+        - name: CUDA_VERSION
+          value: "10.1"  
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+      volumes:
+      - name: python-code-volume
+        persistentVolumeClaim:
+          claimName: clearml-worker-local-pvc
+      - name: clearml-config
+        configMap: 
+          name: clearml-conf
